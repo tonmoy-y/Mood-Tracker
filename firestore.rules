@@ -1,0 +1,183 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(userPath(request.auth.uid))
+        && get(userPath(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function validRole(role) {
+      return role in ['user', 'admin'];
+    }
+
+    function validStatus(status) {
+      return status in ['active', 'inactive'];
+    }
+
+    function validMood(mood) {
+      return mood in ['happy', 'neutral', 'sad', 'angry'];
+    }
+
+    function validDayKey(dayKey) {
+      return dayKey is string && dayKey.size() == 10;
+    }
+
+    function validFullName(fullName) {
+      return fullName is string
+        && fullName.size() >= 2
+        && fullName.size() <= 80;
+    }
+
+    function isBootstrapAdminEmail() {
+      return isSignedIn()
+        && request.auth.token.email == 'tonmoysarker451@gmail.com';
+    }
+
+    function validOverviewData(data) {
+      return data.keys().hasOnly(['totalMoods', 'moodDistribution', 'updatedAt'])
+        && data.totalMoods is int
+        && data.totalMoods >= 0
+        && data.updatedAt == request.time
+        && data.moodDistribution is map
+        && data.moodDistribution.keys().hasOnly(['happy', 'neutral', 'sad', 'angry'])
+        && data.moodDistribution.happy is int
+        && data.moodDistribution.neutral is int
+        && data.moodDistribution.sad is int
+        && data.moodDistribution.angry is int
+        && data.moodDistribution.happy >= 0
+        && data.moodDistribution.neutral >= 0
+        && data.moodDistribution.sad >= 0
+        && data.moodDistribution.angry >= 0;
+    }
+
+    match /users/{uid} {
+      allow create: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'fullName', 'role', 'status', 'createdAt', 'lastActiveAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email is string
+        && validFullName(request.resource.data.fullName)
+        && (
+          request.resource.data.role == 'user'
+          || (isBootstrapAdminEmail() && request.resource.data.role == 'admin')
+        )
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.lastActiveAt is timestamp;
+
+      allow read: if isSelf(uid) || isAdmin();
+
+      allow update: if (
+          isSelf(uid)
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['fullName', 'lastActiveAt', 'role'])
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.email == resource.data.email
+          && validFullName(request.resource.data.fullName)
+          && (
+            request.resource.data.role == resource.data.role
+            || (
+              isBootstrapAdminEmail()
+              && resource.data.role == 'user'
+              && request.resource.data.role == 'admin'
+            )
+          )
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.lastActiveAt is timestamp
+        )
+        || (
+          isAdmin()
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status'])
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.fullName == resource.data.fullName
+          && validRole(request.resource.data.role)
+          && validStatus(request.resource.data.status)
+        );
+
+      allow delete: if false;
+    }
+
+    match /moods/{moodId} {
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['userId', 'mood', 'note', 'dayKey', 'createdAt'])
+        && request.resource.data.userId == request.auth.uid
+        && validMood(request.resource.data.mood)
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 180
+        && validDayKey(request.resource.data.dayKey)
+        && request.resource.data.createdAt == request.time;
+
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /journals/{journalId} {
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['userId', 'date', 'text', 'createdAt', 'updatedAt'])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.date is string
+        && request.resource.data.date.size() == 10
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 5000
+        && request.resource.data.updatedAt == request.time
+        && (
+          !exists(/databases/$(database)/documents/journals/$(journalId))
+            ? request.resource.data.createdAt == request.time
+            : request.resource.data.createdAt == resource.data.createdAt
+        );
+
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /adminStats/overview {
+      allow read: if isAdmin();
+
+      allow create, update: if isAdmin() && validOverviewData(request.resource.data);
+
+      allow delete: if false;
+    }
+
+    match /adminStats/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /supportMessages/{messageId} {
+      allow read: if isSignedIn();
+
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['text', 'createdBy', 'createdAt', 'updatedAt'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 3
+        && request.resource.data.text.size() <= 400
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['text', 'createdBy', 'createdAt', 'updatedAt'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 3
+        && request.resource.data.text.size() <= 400
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+  }
+}
