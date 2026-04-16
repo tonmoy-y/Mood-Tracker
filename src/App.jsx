@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import AppErrorBoundary from './components/common/AppErrorBoundary'
 import LoadingScreen from './components/common/LoadingScreen'
 import { USER_ROLES } from './constants/app'
 import { useAuth } from './hooks/useAuth'
@@ -28,29 +29,31 @@ const HomeRedirect = () => {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomeRedirect />} />
-        <Route path="/auth" element={<AuthPage />} />
-        <Route
-          path="/app"
-          element={
-            <ProtectedRoute allowedRoles={[USER_ROLES.user]}>
-              <UserDashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute allowedRoles={[USER_ROLES.admin]}>
-              <AdminDashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </BrowserRouter>
+    <AppErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<HomeRedirect />} />
+          <Route path="/auth" element={<AuthPage />} />
+          <Route
+            path="/app"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.user]}>
+                <UserDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.admin]}>
+                <AdminDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </BrowserRouter>
+    </AppErrorBoundary>
   )
 }
 
