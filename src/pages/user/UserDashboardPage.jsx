@@ -17,7 +17,7 @@ import { addMoodEntry, getWeeklyMoodSummary, subscribeMoodEntries } from '../../
 import { subscribeSupportMessages } from '../../services/supportService'
 import { calculateStreakDays, toDate, toIsoDate } from '../../utils/date'
 
-const MOOD_COOLDOWN_MINUTES = 30
+const MOOD_COOLDOWN_MINUTES = 10
 
 const UserDashboardPage = () => {
   const { user } = useAuth()
